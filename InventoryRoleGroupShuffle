@@ -1,0 +1,31 @@
+// for the Role 'Field Inventory First Approver', remove role from users
+// that do not have it inherited
+var userWithRole = new GlideRecord('sys_user_has_role');
+userWithRole.addEncodedQuery('role=79a8d0914f3acf000e5b022f0310c773');
+userWithRole.query();
+var userIDs = [];
+while (userWithRole.next()) {
+    //gs.addInfoMessage('next user with role: ' + userWithRole.getValue('user'));
+    //gs.addInfoMessage('role is inherited ?  ' + userWithRole.getDisplayValue('inherited'));
+    if (userWithRole.getValue('inherited') === '0') { // yes, this bool is a string
+        gs.addInfoMessage('delete it ');
+        userIDs.push(userWithRole.getValue('user'));
+        userWithRole.deleteRecord();
+    }
+}
+// add those users to the Group 'Field Inventory First Approver'
+for (i = 0; i < userIDs.length; i++) {
+    var groupMembership = new GlideRecord('sys_user_grmember');
+    groupMembership.addQuery('group', '1e004482db6c88502a0278f9bf961983');
+    groupMembership.addQuery('user', userIDs[i]);
+    groupMembership.query();
+    if (!groupMembership.next()) {
+        gs.addInfoMessage('user not in group, add them ');
+        groupMembership.initialize();
+        groupMembership.user = userIDs[i];
+        groupMembership.group = '1e004482db6c88502a0278f9bf961983';
+        groupMembership.insert();
+    } else {
+        gs.addInfoMessage('user already in group, should never happen');
+    }
+}
