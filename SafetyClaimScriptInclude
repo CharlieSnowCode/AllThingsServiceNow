@@ -1,0 +1,60 @@
+    // This is the entry function to call when IR Claim is Approved
+    // create a record in appropriate table for RITM
+    CreateTargetTable: function(ritm_sys_id) {
+        try {
+            var ritm = new GlideRecord('sc_req_item');
+            ritm.addQuery('sys_id', ritm_sys_id);
+            ritm.query();
+            if (ritm.next()) {
+                var set = new GlideappVariablePoolQuestionSet();
+                set.setRequestID(ritm_sys_id);
+                set.load();
+                var vs = set.getFlatQuestions();
+                var claimType = this._getClaimType(vs);
+                return this._createInitializeClaimRecord(ritm_sys_id, claimType, vs);
+            } else {
+                throw "Requested Item not found for: " + ritm_sys_id;
+            }
+        } catch (ex) {
+            var eMessage = ex;
+            if (ex.message)
+                eMessage = ex.message;
+            gs.error('Error in OsmoseSafetyClaim.CreateTargetTable : ' + eMessage);
+        }
+    },
+
+    // create a record in the appropriate table
+    // populate the 'base' values
+    // call corresponding function to populate type-specific values
+    _createInitializeClaimRecord: function(ritm_sys_id, claimType, varSet) {
+        var claimRec = null;
+        if (claimType == 'Property Damage')
+            claimRec = new GlideRecord('u_property_damage_claim');
+        else if (claimType == 'Vehicle Accident')
+            claimRec = new GlideRecord('u_vehicle_accident_claim');
+        else if (claimType == 'Employee Injury')
+            claimRec = new GlideRecord('u_employee_injury_claim');
+        else if (claimType == 'Underground Facility Damage')
+            claimRec = new GlideRecord('u_underground_facility_damage');
+        else
+            throw "Claim type not recognized: " + claimType;
+
+        claimRec.initialize();
+        claimRec.setValue('u_requested_item', ritm_sys_id);
+        this._populateBaseValues(claimRec, varSet);
+        claimRec.insert();
+
+        // call appropriate function to populate specific values by type
+        // these functions contain code to copy over any attachments from the RITM
+        if (claimType == 'Property Damage')
+            this._populatePropertyClaim(ritm_sys_id, claimRec, varSet);
+        else if (claimType == 'Vehicle Accident')
+            this._populateVehicleClaim(ritm_sys_id, claimRec, varSet);
+        else if (claimType == 'Employee Injury')
+            this._populateEmployeeClaim(ritm_sys_id, claimRec, varSet);
+        else
+            this._populateUndergroundFacilityClaim(ritm_sys_id, claimRec, varSet);
+
+        claimRec.update();
+        return claimRec.sys_id;
+    },
