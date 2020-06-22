@@ -1,0 +1,41 @@
+function getRecentGroups() {
+    var gr = new GlideRecord('x_osmo2_pa_approv_weekly_payroll_group');
+    gr.addEncodedQuery('sys_created_on>javascript:gs.beginningOfLastWeek()');
+    gr.query();
+
+    var log = [];
+    while (gr.next()) {
+        log.push(gr.getDisplayValue());
+    }
+    //gs.addInfoMessage('found this many Groups: ' + gr.getRowCount());
+    return log;
+}
+
+function findOrphanedGroups(keyString) {
+	var returnVal = '';
+    var g = new GlideRecord('x_osmo2_pa_approv_weekly_payroll');
+    g.addEncodedQuery('payroll_groupSTARTSWITH' + keyString);
+    g.query();
+    if (g.getRowCount() == 0) {
+        returnVal = '\nFound an orphan Group: ' + keyString;
+    }
+	return returnVal;
+}
+
+(function(outputs, steps, stepResult, assertEqual) {
+    var msg = '';
+    var keyArray = getRecentGroups();
+    for (i = 0; i < keyArray.length; i++) {
+        var result = findOrphanedGroups(keyArray[i]);
+        msg += result;
+    }
+    if (msg.length == 0) {
+        stepResult.setOutputMessage("Success, no orphaned Payroll Groups");
+        return true;
+    } else {
+        stepResult.setOutputMessage(msg);
+        return false;
+    }
+})(outputs, steps, stepResult, assertEqual);
+// uncomment the next line to execute this script as a jasmine test
+//jasmine.getEnv().execute();
