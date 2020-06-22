@@ -1,0 +1,100 @@
+function isEmployeeInCollection(crewMembers, empID) {
+    var index;
+    for (index = 0; index < crewMembers.length; index++) {
+        if (crewMembers[index].employee_number.startsWith(empID))
+            return true;
+    }
+    return false;
+}
+
+(function(outputs, steps, stepResult, assertEqual) {
+    // add test script here
+    try {
+        var errorMessage = '';
+        var paUtil = new pa_util();
+        var supervisors = paUtil.getSupervisors();
+        if (supervisors.length == 0)
+            errorMessage += "No Supervisors returned from pa_util.getSupervisors().";
+
+        var crewMembers = paUtil.getEmployees();
+        if (crewMembers.length == 0)
+            errorMessage += "No Crew Members returned from pa_util.getEmployees().";
+
+        // test to see if correct employees are returned
+        var empID;
+        var fcmGR = new GlideRecord("u_field_crew_member");
+        fcmGR.addEncodedQuery("u_status=0f8aabfcdb529b40b8a5fb16bf961944");
+        fcmGR.setLimit(1);
+        fcmGR.query();
+        if (fcmGR.next()) {
+            empID = fcmGR.getValue('u_employeeid');
+            //active employee in collection?
+            if (isEmployeeInCollection(crewMembers, empID) == 'false')
+                errorMessage += "Active Crew Member: " + empID + " not returned by getEmployees";
+        }
+        var fcmGR1 = new GlideRecord("u_field_crew_member");
+        fcmGR1.addEncodedQuery("u_status!=0f8aabfcdb529b40b8a5fb16bf961944^ORu_status=NULL^u_termination_dateRELATIVEGE@dayofweek@ago@29");
+        fcmGR1.setLimit(1);
+        fcmGR1.query();
+        if (fcmGR1.next()) {
+            empID = fcmGR1.getValue('u_employeeid');
+			// employee inactive recently in collection?
+			if(isEmployeeInCollection(crewMembers, empID) == 'false')
+                errorMessage += "Recently inactive Crew Member: " + empID + " not returned by getEmployees";
+        }
+        var fcmGR2 = new GlideRecord("u_field_crew_member");
+        fcmGR2.addEncodedQuery("u_status!=0f8aabfcdb529b40b8a5fb16bf961944^ORu_status=NULL^u_termination_dateRELATIVELE@dayofweek@ago@31");
+        fcmGR2.setLimit(1);
+        fcmGR2.query();
+        if (fcmGR2.next()) {
+            empID = fcmGR2.getValue('u_employeeid');
+			// long inactive employee in collection?
+			if(isEmployeeInCollection(crewMembers, empID) == 'true')
+                errorMessage += "Long inactive Crew Member: " + empID + " was returned by getEmployees";
+        }
+
+        var hoursTypes = paUtil.getPayrollHoursTypes('Hourly');
+        if (hoursTypes.length == 0)
+            errorMessage += "No Hours Types returned from pa_util.hoursTypes('Hourly').";
+
+        var premiums = paUtil.getPayrollHoursTypes('Premium');
+        if (premiums.length == 0)
+            errorMessage += "No Premium Types returned from pa_util.hoursTypes('Premium').";
+
+        var hoursRules = paUtil.getPayrollHoursRules();
+        if (hoursRules.length == 0)
+            errorMessage += "No Hours Type rules returned from pa_util.getPayrollHoursRules().";
+
+        var roles = paUtil.getFieldEmployeeTypes();
+        if (roles.length == 0)
+            errorMessage += "No Field Employee Types returned from pa_util.getFieldEmployeeTypes().";
+
+        var jobs = paUtil.getJobNumbers();
+        var jobCount = (jobs.length + 1) / 8;
+        if (jobCount.length == 0)
+            errorMessage += "No Job Numbers returned from pa_util.getJobNumbers().";
+
+        //getFieldEmployeeTypes
+        if (errorMessage.length > 0) {
+            stepResult.setOutputMessage(errorMessage);
+            return false;
+        } else {
+            var msg = "Functions in pa_util are returning ";
+            msg += supervisors.length + " supervisors, ";
+            msg += crewMembers.length + " crew employees, ";
+            msg += hoursTypes.length + " Hours Types, ";
+            msg += premiums.length + " Premium Types, ";
+            msg += roles.length + " crew roles. ";
+            msg += jobCount + " job numbers. ";
+            msg += hoursRules.length + " Rules for Hours Type";
+            stepResult.setOutputMessage(msg);
+            return true;
+        }
+    } catch (ex) {
+        stepResult.setOutputMessage("Exception in test : " + ex.message);
+        return false;
+    }
+
+})(outputs, steps, stepResult, assertEqual);
+// uncomment the next line to execute this script as a jasmine test
+//jasmine.getEnv().execute();
