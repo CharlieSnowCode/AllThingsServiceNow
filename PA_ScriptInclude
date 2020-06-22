@@ -1,0 +1,60 @@
+/* get employees (crew and users)
+	return an array of employees from these tables, with these conditions:
+	- sys_user pay group 8 and in a Department that starts with "Territory Overhead"
+	- u_field_crew_member: all
+		(applies to both crew members and users): either Active or 
+		not Active and date of termination is within 30 days
+	*/
+    getEmployees: function() {
+
+        // field crew member status
+        var fcmsActive = '0f8aabfcdb529b40b8a5fb16bf961944';
+        var display = '';
+        var employees = [];
+        var employee_numbers = [];
+        var employeeNumber = '';
+
+        var userGroup8 = new GlideRecord('sys_user');
+        userGroup8.addEncodedQuery("active=true^employee_number!=null^u_paygroup=8^department.nameSTARTSWITHTerritory Overhead^NQu_inactive_dateRELATIVEGE@dayofweek@ago@30^active=false^employee_number!=null^u_paygroup=8^department.nameSTARTSWITHTerritory Overhead");
+        userGroup8.query();
+        while (userGroup8.next()) {
+            employeeNumber = userGroup8.getValue('employee_number');
+            employee_numbers.push(employeeNumber);
+            display = userGroup8.getValue('last_name') + ", " + userGroup8.getValue('first_name') + "  " + employeeNumber + this._getCrewId(userGroup8);
+            employees.push({
+                'sys_id': userGroup8.getValue('sys_id'),
+                'display': display,
+                'name': userGroup8.getValue('name'),
+                'employee_number': employeeNumber,
+                'title': userGroup8.getDisplayValue('title'),
+                'type': 'sys_user'
+            });
+        }
+
+        // get employees from the crew table
+        var grCrew = new GlideRecord('u_field_crew_member');
+        grCrew.addEncodedQuery('u_status=' + fcmsActive + '^NQu_termination_dateRELATIVEGE@dayofweek@ago@30^u_status!=' + fcmsActive);
+        grCrew.addQuery('u_employeeid', 'NOT IN', employee_numbers);
+        grCrew.query();
+        while (grCrew.next()) {
+            display = grCrew.getValue('u_last_name') + ", " + grCrew.getValue('u_first_name') + "  " + grCrew.getValue('u_employeeid') + this._getCrewId(grCrew);
+            employees.push({
+                'sys_id': grCrew.getValue('sys_id'),
+                'display': display,
+                'name': grCrew.getValue('u_name'),
+                'employee_number': grCrew.getValue('u_employeeid'),
+                'title': grCrew.getDisplayValue('u_job_title'),
+                'type': 'crew'
+            });
+        }
+        //gs.addInfoMessage('total employees' + employees.length);
+        return employees;
+    },
+
+    _getCrewId: function(glideR) {
+        var crewid = '';
+        var crewIdValue = glideR.getDisplayValue('u_crewid');
+        if (crewIdValue)
+            crewid = '  [' + crewIdValue + ']';
+        return crewid;
+    },
