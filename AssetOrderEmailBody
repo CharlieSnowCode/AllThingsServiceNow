@@ -1,0 +1,185 @@
+	// return string array used to build the body of email triggered by FMT Dropship Assets
+    getDropshipBody: function(approvalSysID) {
+		var emailBody = this._buildCommonInfo(false, approvalSysID);
+		
+		return emailBody;
+	},
+	
+  // dropshipAndCorrosion: true = include Assets that are dropship and for corrosion purchasing
+  // dropshipAndCorrosion: false = include only Assets that are dropship
+	_buildCommonInfo: function(dropshipAndCorrosion, approvalSysID){
+		var emailBody = [];
+        emailBody.push("<style>td { border:1px solid black; }</style>");
+        emailBody.push("The following Inventory items have been approved.<br/><br/>");
+        var gr = new GlideRecord('sysapproval_approver');
+        gr.addQuery('sys_id', approvalSysID);
+        gr.query();
+        while (gr.next()) {
+            if (!gr.sysapproval.nil()) {
+                var item = gr.sysapproval.getRefRecord();
+                var set = new GlideappVariablePoolQuestionSet();
+                set.setRequestID(item.sys_id);
+                set.load();
+                var vs = set.getFlatQuestions();
+                for (var i = 0; i < vs.size(); i++) {
+					var label = this._getLabel(vs, i);
+					var value = this._getValue(vs, i) ;
+					var displayValue = this._getDisplayValue(vs, i);
+					var name = this._getName(vs, i);
+
+                    if (label == "My Order ID") {} 
+					else if (label == "Mandatory Met") {} 
+					else if (label == "Location Name" && value == "") {} 
+					else if (label == "Address" && value == "") {} 
+					else if (label == "Ready State") {}
+					else if (label == "Item List Header") {}
+					else if (label == "Service Type") {}
+					else if (label == "Item Groups") {}
+					else if (label == "Total Weight Sum") {
+                        /* the only assets that have weight are also field countable */
+                    }
+					else if (label == "Add New") {} 
+					else if (name.indexOf("html_output") != -1) {}
+					else if (name.indexOf("table_macro") != -1) {}
+					else if (label == "JSON Output" && name == "fmt_asset_order_json_output") {}
+					
+					else if (label == "Submitter") {
+                        emailBody.push("<b>Submitter:</b> " + displayValue);
+                        emailBody.push("<br />");
+                    } else if (label == "Approver") {
+                        emailBody.push("<b>Approver:</b> " + this._getApprover(vs, i));
+                        emailBody.push("<br />");
+                    } else if (label == "Job Number") {
+                        emailBody.push("<b>Job Number:</b> " + displayValue);
+                        emailBody.push("<br />");
+                    } else if (label == "Ship To") {
+                        emailBody.push("<b>Ship To:</b> " + displayValue);
+                        emailBody.push("<br />");
+                    }
+					else if (label == "Address" && displayValue != "") {
+                        emailBody.push("<b>Address:</b> " + displayValue);
+                        emailBody.push("<br />");
+                    }
+					else if (label == "State") {
+                        emailBody.push("<b>State:</b> " + displayValue);
+                        emailBody.push("<br />");
+                    }
+					else if (label == "Inventory Location") {
+                        var location = displayValue;
+                        emailBody.push("<b>Inventory Location:</b> " + location);
+                        emailBody.push("<br />");
+                        emailBody.push(this._getInspectionTypeUID(location, vs));
+                        emailBody.push("<br />");
+                    }
+					else if (label == "JSON Output" && name == "fmt_asset_order_cart_json_output") {
+
+                        if (value != "" && value != null) {
+                            var parsed = JSON.parse(value);
+                            for (var m = 0; m < parsed.length; m++) {
+                                parsed[m].fields.splice(7, 1); // Service Type
+                                parsed[m].fields.splice(7, 1); // Hex
+                            }
+							// the cart 'parsed' contains all Assets, remove the non-inventory ones
+							// and others based on the value of dropshipAndCorrosion
+              var deleteRows = [];
+              for (var n = 0; n < parsed.length; n++) {
+                var assetGR = new GlideRecord("u_materials_supplies_asset");
+                assetGR.addQuery("u_item_number", parsed[n].fields[1].value);
+                assetGR.query();
+                while (assetGR.next()) {
+									// email for Dropship and Corrosion
+									if(dropshipAndCorrosion){
+										if(!assetGR.u_field_countable || !assetGR.u_corrosion_purchasing || !assetGR.u_field_dropship)
+											deleteRows.push(n);
+									}
+									else{// email for Dropship only
+										if(!assetGR.u_field_countable || assetGR.u_corrosion_purchasing || !assetGR.u_field_dropship)
+											deleteRows.push(n);
+									}
+                }
+              }
+              for (var t = deleteRows.length - 1; t >= 0; t--) {
+                parsed.splice(deleteRows[t], 1);
+              }
+              emailBody.push(this._constructHTMLVariable(parsed, "Inventory Items"));
+            }
+          } else if (label == "JSON Output" && name == "fmt_non_asset_order_json_output") {}
+          else {
+            if (label) {
+              emailBody.push("<b>" + label + "</b>: " + value);
+              emailBody.push("<br />");
+            }
+          }
+        }
+      }
+		}
+		return emailBody;
+	},
+	
+	// return string array used to build the body of email triggered by FMT Corrosion Dropship Assets
+    getDropshipCorrosionBody: function(approvalSysID) {
+		var emailBody = this._buildCommonInfo(true, approvalSysID);
+		
+		return emailBody;
+    },
+
+	
+	_constructHTMLVariable: function(jsonOutput, tableTitle) {
+		if (jsonOutput.length == 0) {
+			return "<br />";
+		}
+		var sHTML = "<h4>" + tableTitle + "</h4>";
+		sHTML += "<table class=\"table table-striped\"><tbody>";
+
+		// Headers
+		if (jsonOutput.length > 0) {
+			sHTML += "<tr>";
+			for (var t = 0; t < jsonOutput[0].fields.length; t++) {
+				sHTML += "<th class=\"table-head-striped\">" + jsonOutput[0].fields[t].label + "</th>";
+			}
+			sHTML += "</tr>";
+		}
+		// Body Rows
+		for (var q = 0; q < jsonOutput.length; q++) {
+			sHTML += "<tr>";
+			for (var tt = 0; tt < jsonOutput[q].fields.length; tt++) {
+				switch (jsonOutput[q].fields[tt].type) {
+					case "reference":
+						sHTML += "<td>" + jsonOutput[q].fields[tt].value.displayValue + "</td>";
+					break;
+					case "choice":
+						var choiceDisplayValue = jsonOutput[q].fields[tt].value;
+						for (var cI = 0; cI < jsonOutput[q].fields[tt].choices.length; cI++) {
+							if (jsonOutput[q].fields[tt].choices[cI].value == choiceDisplayValue) {
+								choiceDisplayValue = jsonOutput[q].fields[tt].choices[cI].label;
+								break;
+							}
+						}
+						sHTML += "<td>" + choiceDisplayValue + "</td>";
+					break;
+					case "checkbox":
+						var sCheckBoxDisplay = "Yes";
+						if (jsonOutput[q].fields[tt].value == false) {
+							sCheckBoxDisplay = "No";
+						}
+						sHTML += "<td>" + sCheckBoxDisplay + "</td>";
+					break;
+					default:
+						sHTML += "<td>" + jsonOutput[q].fields[tt].value + "</td>";
+					break;
+				}
+			}
+			sHTML += "</tr>";
+		}
+		sHTML += "</tbody></table>";
+		return sHTML;
+	},
+	
+	_logException: function(exception) {
+		var msg = '@@ Error in Email Script asset_order_additional_details: ';
+		if (exception.message)
+			msg += exception.message;
+		else
+			msg += exception;
+		gs.error(msg);
+	},
